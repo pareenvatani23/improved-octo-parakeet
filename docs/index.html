@@ -80,6 +80,27 @@
   .stat .k { font-size: 0.72rem; color: #8090c0; text-transform: uppercase; letter-spacing: .04em; }
   .stat .v { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
   #status { margin-top: 12px; color: #ffd166; font-weight: 600; min-height: 1.2em; }
+  .thoughts {
+    margin-top: 14px;
+    background: #0e1630;
+    border: 1px solid #243358;
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .thoughts-title { font-weight: 700; margin-bottom: 8px; }
+  .thoughts p { margin: 7px 0; font-size: 0.95rem; color: #dfe6ff; display: flex; gap: 10px; align-items: baseline; }
+  .tlabel {
+    flex: 0 0 92px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 700;
+    padding: 2px 0;
+  }
+  .tlabel.last { color: #79a0ff; }
+  .tlabel.plan { color: #ffd166; }
+  .tlabel.realize { color: #3ddc84; }
+  #thoughtRealize { font-style: italic; }
   .legend { font-size: 0.85rem; color: #93a2d4; margin-top: 6px; }
   footer { text-align: center; color: #6b78a8; font-size: 0.82rem; padding: 8px 0 28px; }
   a { color: #79a0ff; }
@@ -121,6 +142,13 @@
         <div class="stat"><div class="k">Success rate</div><div class="v" id="success">—</div></div>
         <div class="stat"><div class="k">Stairs (live)</div><div class="v" id="stairs">0/6</div></div>
         <div class="stat"><div class="k">Epsilon</div><div class="v" id="epsilon">1.000</div></div>
+      </div>
+
+      <div class="thoughts">
+        <div class="thoughts-title">🧠 Robot's thoughts</div>
+        <p><span class="tlabel last">Last move</span><span id="thoughtLast">…</span></p>
+        <p><span class="tlabel plan">Plan</span><span id="thoughtPlan">…</span></p>
+        <p><span class="tlabel realize">Realisation</span><span id="thoughtRealize">…</span></p>
       </div>
     </div>
 

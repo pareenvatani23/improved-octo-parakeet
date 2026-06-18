@@ -1,7 +1,7 @@
 /* UI + rendering for the in-browser Robot Stairs RL Sim. */
 "use strict";
 
-const { StairClimbEnv, TabularQLearner, ACTION_NAMES } = window.RobotStairs;
+const { StairClimbEnv, TabularQLearner, IDLE, WALK, JUMP, JUMP_RIGHT } = window.RobotStairs;
 
 // --- shared world + agent ---------------------------------------------------
 const world = new StairClimbEnv();
@@ -24,6 +24,9 @@ const els = {
   success: document.getElementById("success"),
   stairs: document.getElementById("stairs"),
   epsilon: document.getElementById("epsilon"),
+  thoughtLast: document.getElementById("thoughtLast"),
+  thoughtPlan: document.getElementById("thoughtPlan"),
+  thoughtRealize: document.getElementById("thoughtRealize"),
 };
 
 // --- canvas sizing (crisp on HiDPI) ----------------------------------------
@@ -181,31 +184,113 @@ let demoObs = demoEnv.reset();
 let pauseFrames = 0;
 let banner = null;   // {text, color, ok} shown when an episode ends
 
+// per-attempt bookkeeping used to narrate the robot's "thoughts"
+let demoLastAction = null;
+let demoJumps = 0;
+let demoStartStep = demoEnv.stepIndex(demoEnv.x);
+let demoMaxStep = demoStartStep;
+let realization = "Hit Train, then watch me. I'll narrate what I'm doing and what I learn.";
+
+function newAttempt() {
+  demoObs = demoEnv.reset();
+  banner = null;
+  demoJumps = 0;
+  demoStartStep = demoEnv.stepIndex(demoEnv.x);
+  demoMaxStep = demoStartStep;
+}
+
 function tickDemo() {
   // Hold the final frame (with banner) for a beat, then reset for a new attempt.
   if (pauseFrames > 0) {
     pauseFrames--;
-    if (pauseFrames === 0) { demoObs = demoEnv.reset(); banner = null; }
+    if (pauseFrames === 0) newAttempt();
     return;
   }
   const stepsPerFrame = parseInt(els.speed.value, 10);
   for (let k = 0; k < stepsPerFrame; k++) {
     const a = agent.act(demoObs, els.greedy.checked);
+    demoLastAction = a;
+    const wasGround = demoEnv.onGround;
     const res = demoEnv.step(a);
+    if ((a === JUMP || a === JUMP_RIGHT) && wasGround) demoJumps++;
+    demoMaxStep = Math.max(demoMaxStep, res.info.stepIndex);
     demoObs = res.obs;
     if (res.done) {
       lastInfo = res.info;
+      const n = demoEnv.numSteps;
       if (res.info.reachedGoal) {
         banner = { text: "✓ REACHED THE TOP!", color: "#3ddc84", ok: true };
+        realization = `Made it to the top in ${demoJumps} jumps. Lesson holding up: take a run-up, jump once at each ledge, walk between them.`;
       } else if (res.info.collapsed) {
         banner = { text: "✗ OUT OF ENERGY — collapsed", color: "#ff5d5d", ok: false };
+        if (demoMaxStep <= demoStartStep) {
+          realization = `I ran out of energy and never cleared the first ledge — I think I keep jumping without enough run-up, so I just bump the step. I should build speed first, then jump.`;
+        } else {
+          realization = `I ran out of energy on step ${demoMaxStep}/${n}. I jumped ${demoJumps} times — too many wasted hops drained my stamina. I should jump only at the ledges.`;
+        }
       } else {
         banner = { text: "✗ TIMED OUT", color: "#ffb05d", ok: false };
+        realization = `I ran out of time on step ${demoMaxStep}/${n} without finishing. I was too hesitant — I need to commit to moving right and jump at the ledge.`;
       }
       pauseFrames = 45;
       break;
     }
   }
+}
+
+// --- plain-English narration of the robot's behaviour -----------------------
+function describeAction(a) {
+  switch (a) {
+    case IDLE: return "stood still for a moment";
+    case WALK: return "walked right to build up speed";
+    case JUMP: return "jumped straight up";
+    case JUMP_RIGHT: return "leapt up and to the right to clear a step";
+    default: return "got ready";
+  }
+}
+
+function greedyBest(obs) {
+  const base = agent._base(agent.discretize(obs));
+  let best = -Infinity, ba = 0, allZero = true;
+  for (let a = 0; a < agent.nActions; a++) {
+    const v = agent.q[base + a];
+    if (v !== 0) allZero = false;
+    if (v > best) { best = v; ba = a; }
+  }
+  return { a: ba, allZero };
+}
+
+function describePlan() {
+  const env = demoEnv, obs = demoObs;
+  const idx = env.stepIndex(env.x);
+  const n = env.numSteps;
+  const distToLedge = Math.max(0, env.stepWidth - obs[0]).toFixed(2);
+  const epct = Math.round(100 * env.energy / env.maxEnergy);
+  const exploring = !els.greedy.checked && agent.epsilon > 0.3;
+  const g = greedyBest(obs);
+
+  let loc;
+  if (idx >= n) loc = "I'm up on the top platform — basically done.";
+  else if (env.onGround) loc = `I'm standing on step ${idx} of ${n}, about ${distToLedge}m from the next ledge.`;
+  else loc = `I'm in mid-air over step ${idx} of ${n}, hoping to land on the next one.`;
+
+  if (epct < 25 && idx < n) loc += ` I'm low on stamina (${epct}%) — need to finish soon.`;
+
+  let intent;
+  if (exploring || g.allZero) {
+    intent = "I haven't figured out this spot yet, so I'm trying moves at random to see what works.";
+  } else {
+    intent = `Plan: ${describeAction(g.a)}.`;
+  }
+  return `${loc} ${intent}`;
+}
+
+function updateThoughts() {
+  if (!els.thoughtLast) return;
+  els.thoughtLast.textContent =
+    demoLastAction == null ? "Waiting to start…" : `I just ${describeAction(demoLastAction)}.`;
+  els.thoughtPlan.textContent = describePlan();
+  els.thoughtRealize.textContent = realization;
 }
 
 let lastInfo = null;
@@ -305,7 +390,8 @@ setInterval(() => {
   if (lastInfo) {
     els.stairs.textContent = `${lastInfo.stepIndex}/${world.numSteps}`;
   }
-}, 200);
+  updateThoughts();
+}, 150);
 
 // --- wire up ----------------------------------------------------------------
 els.train.addEventListener("click", startTraining);
@@ -321,9 +407,12 @@ els.reset.addEventListener("click", () => {
   els.train.disabled = false;
   els.train.textContent = "Train (5000 episodes)";
   els.status.textContent = "Untrained — acting randomly: it often runs out of energy and collapses. Hit Train to watch it learn.";
+  realization = "Reset — I've forgotten everything. Train me again and watch what I work out.";
+  updateThoughts();
 });
 window.addEventListener("resize", drawCurve);
 
 els.status.textContent = "Untrained — acting randomly: it often runs out of energy and collapses. Hit Train to watch it learn.";
+updateThoughts();
 drawCurve();
 loop();
