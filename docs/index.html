@@ -100,7 +100,13 @@
   .tlabel.last { color: #79a0ff; }
   .tlabel.plan { color: #ffd166; }
   .tlabel.realize { color: #3ddc84; }
-  #thoughtRealize { font-style: italic; }
+  .realwrap { display: flex; gap: 10px; align-items: baseline; margin: 7px 0; }
+  .thoughtlog { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .thoughtlog .entry { font-size: 0.9rem; font-style: italic; transition: opacity .3s; }
+  .thoughtlog .entry.ok { color: #3ddc84; }
+  .thoughtlog .entry.fail { color: #ff8a8a; }
+  .thoughtlog .entry.neutral { color: #b8c4ea; }
+  .thoughtlog .entry .cnt { font-style: normal; font-weight: 700; opacity: 0.8; }
   .legend { font-size: 0.85rem; color: #93a2d4; margin-top: 6px; }
   footer { text-align: center; color: #6b78a8; font-size: 0.82rem; padding: 8px 0 28px; }
   a { color: #79a0ff; }
@@ -148,7 +154,10 @@
         <div class="thoughts-title">🧠 Robot's thoughts</div>
         <p><span class="tlabel last">Last move</span><span id="thoughtLast">…</span></p>
         <p><span class="tlabel plan">Plan</span><span id="thoughtPlan">…</span></p>
-        <p><span class="tlabel realize">Realisation</span><span id="thoughtRealize">…</span></p>
+        <div class="realwrap">
+          <span class="tlabel realize">Realisations</span>
+          <div id="thoughtLog" class="thoughtlog">…</div>
+        </div>
       </div>
     </div>
 

@@ -26,7 +26,7 @@ const els = {
   epsilon: document.getElementById("epsilon"),
   thoughtLast: document.getElementById("thoughtLast"),
   thoughtPlan: document.getElementById("thoughtPlan"),
-  thoughtRealize: document.getElementById("thoughtRealize"),
+  thoughtLog: document.getElementById("thoughtLog"),
 };
 
 // --- canvas sizing (crisp on HiDPI) ----------------------------------------
@@ -189,7 +189,20 @@ let demoLastAction = null;
 let demoJumps = 0;
 let demoStartStep = demoEnv.stepIndex(demoEnv.x);
 let demoMaxStep = demoStartStep;
-let realization = "Hit Train, then watch me. I'll narrate what I'm doing and what I learn.";
+// running log of the last few realisations (newest last); consecutive
+// duplicates are collapsed into a count.
+const MAX_LOG = 4;
+let realLog = [{ text: "Hit Train, then watch me. I'll narrate what I do and what I learn.", ok: null, count: 1 }];
+
+function logRealization(text, ok) {
+  const top = realLog[realLog.length - 1];
+  if (top && top.text === text) {
+    top.count += 1;
+  } else {
+    realLog.push({ text, ok, count: 1 });
+    if (realLog.length > MAX_LOG) realLog.shift();
+  }
+}
 
 function newAttempt() {
   demoObs = demoEnv.reset();
@@ -220,17 +233,17 @@ function tickDemo() {
       const n = demoEnv.numSteps;
       if (res.info.reachedGoal) {
         banner = { text: "✓ REACHED THE TOP!", color: "#3ddc84", ok: true };
-        realization = `Made it to the top in ${demoJumps} jumps. Lesson holding up: take a run-up, jump once at each ledge, walk between them.`;
+        logRealization(`Made it to the top in ${demoJumps} jumps. Lesson holding up: take a run-up, jump once at each ledge, walk between them.`, true);
       } else if (res.info.collapsed) {
         banner = { text: "✗ OUT OF ENERGY — collapsed", color: "#ff5d5d", ok: false };
         if (demoMaxStep <= demoStartStep) {
-          realization = `I ran out of energy and never cleared the first ledge — I think I keep jumping without enough run-up, so I just bump the step. I should build speed first, then jump.`;
+          logRealization(`I ran out of energy and never cleared the first ledge — I keep jumping without enough run-up, so I just bump the step. Build speed first, then jump.`, false);
         } else {
-          realization = `I ran out of energy on step ${demoMaxStep}/${n}. I jumped ${demoJumps} times — too many wasted hops drained my stamina. I should jump only at the ledges.`;
+          logRealization(`I ran out of energy on step ${demoMaxStep}/${n}. I jumped ${demoJumps} times — too many wasted hops drained my stamina. I should jump only at the ledges.`, false);
         }
       } else {
         banner = { text: "✗ TIMED OUT", color: "#ffb05d", ok: false };
-        realization = `I ran out of time on step ${demoMaxStep}/${n} without finishing. I was too hesitant — I need to commit to moving right and jump at the ledge.`;
+        logRealization(`I ran out of time on step ${demoMaxStep}/${n} without finishing. I was too hesitant — I need to commit to moving right and jump at the ledge.`, false);
       }
       pauseFrames = 45;
       break;
@@ -285,12 +298,24 @@ function describePlan() {
   return `${loc} ${intent}`;
 }
 
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function updateThoughts() {
   if (!els.thoughtLast) return;
   els.thoughtLast.textContent =
     demoLastAction == null ? "Waiting to start…" : `I just ${describeAction(demoLastAction)}.`;
   els.thoughtPlan.textContent = describePlan();
-  els.thoughtRealize.textContent = realization;
+
+  // newest first, older entries progressively dimmed
+  const entries = realLog.slice().reverse();
+  els.thoughtLog.innerHTML = entries.map((e, i) => {
+    const cls = e.ok === true ? "ok" : e.ok === false ? "fail" : "neutral";
+    const opacity = [1, 0.7, 0.5, 0.38][i] ?? 0.3;
+    const cnt = e.count > 1 ? ` <span class="cnt">×${e.count}</span>` : "";
+    return `<div class="entry ${cls}" style="opacity:${opacity}">${esc(e.text)}${cnt}</div>`;
+  }).join("");
 }
 
 let lastInfo = null;
@@ -407,7 +432,7 @@ els.reset.addEventListener("click", () => {
   els.train.disabled = false;
   els.train.textContent = "Train (5000 episodes)";
   els.status.textContent = "Untrained — acting randomly: it often runs out of energy and collapses. Hit Train to watch it learn.";
-  realization = "Reset — I've forgotten everything. Train me again and watch what I work out.";
+  realLog = [{ text: "Reset — I've forgotten everything. Train me again and watch what I work out.", ok: null, count: 1 }];
   updateThoughts();
 });
 window.addEventListener("resize", drawCurve);
