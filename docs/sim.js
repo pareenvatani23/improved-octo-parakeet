@@ -7,6 +7,12 @@
 
 "use strict";
 
+// Wrapped in an IIFE so these declarations don't leak into the global scope.
+// (Classic <script> tags share one global lexical scope, so a top-level
+// `class StairClimbEnv` here would collide with app.js's
+// `const { StairClimbEnv } = window.RobotStairs`.)
+(function () {
+
 // ----------------------------------------------------------------- environment
 const IDLE = 0, WALK = 1, JUMP = 2, JUMP_RIGHT = 3;
 const ACTION_NAMES = ["IDLE", "WALK", "JUMP", "JUMP_RIGHT"];
@@ -255,3 +261,5 @@ class TabularQLearner {
 const RobotStairs = { StairClimbEnv, TabularQLearner, ACTION_NAMES, IDLE, WALK, JUMP, JUMP_RIGHT };
 if (typeof window !== "undefined") window.RobotStairs = RobotStairs;
 if (typeof module !== "undefined" && module.exports) module.exports = RobotStairs;
+
+})();
