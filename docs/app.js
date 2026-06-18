@@ -104,34 +104,64 @@ function drawScene(rect, env) {
   const rx = m.X(env.x);
   const ry = m.Y(env.y);
   const r = Math.max(9, m.s * 0.16);
+  const failed = banner && !banner.ok && pauseFrames > 0;  // collapsed pose
+
+  ctx.save();
+  ctx.translate(rx, ry);
+  if (failed) ctx.rotate(-Math.PI / 2.2);  // tip over when it collapses
   // legs
   ctx.strokeStyle = "#ffd166";
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(rx - r * 0.4, ry); ctx.lineTo(rx - r * 0.4, ry + r * 0.9);
-  ctx.moveTo(rx + r * 0.4, ry); ctx.lineTo(rx + r * 0.4, ry + r * 0.9);
+  ctx.moveTo(-r * 0.4, 0); ctx.lineTo(-r * 0.4, r * 0.9);
+  ctx.moveTo(r * 0.4, 0); ctx.lineTo(r * 0.4, r * 0.9);
   ctx.stroke();
   // body
-  ctx.fillStyle = env.onGround ? "#ff5d5d" : "#ff8a5d";
-  roundRect(ctx, rx - r, ry - r * 1.4, r * 2, r * 1.6, 5);
+  ctx.fillStyle = failed ? "#9aa3c0" : (env.onGround ? "#ff5d5d" : "#ff8a5d");
+  roundRect(ctx, -r, -r * 1.4, r * 2, r * 1.6, 5);
   ctx.fill();
-  // eye
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(rx + r * 0.35, ry - r * 0.75, r * 0.28, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#222";
-  ctx.beginPath();
-  ctx.arc(rx + r * 0.45, ry - r * 0.75, r * 0.13, 0, Math.PI * 2);
-  ctx.fill();
+  // eye (X when failed, open otherwise)
+  if (failed) {
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 2;
+    const ex0 = r * 0.2, ey0 = -r * 0.85, d = r * 0.22;
+    ctx.beginPath();
+    ctx.moveTo(ex0 - d, ey0 - d); ctx.lineTo(ex0 + d, ey0 + d);
+    ctx.moveTo(ex0 + d, ey0 - d); ctx.lineTo(ex0 - d, ey0 + d);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(r * 0.35, -r * 0.75, r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#222";
+    ctx.beginPath();
+    ctx.arc(r * 0.45, -r * 0.75, r * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 
   // energy bar above robot
   const ew = r * 2.2, eh = 5;
   const ex = rx - ew / 2, ey = ry - r * 1.4 - 12;
   ctx.fillStyle = "rgba(255,255,255,0.25)";
   roundRect(ctx, ex, ey, ew, eh, 2); ctx.fill();
-  ctx.fillStyle = "#3ddc84";
-  roundRect(ctx, ex, ey, ew * (env.energy / env.maxEnergy), eh, 2); ctx.fill();
+  const efrac = env.energy / env.maxEnergy;
+  ctx.fillStyle = efrac < 0.25 ? "#ff5d5d" : "#3ddc84";
+  roundRect(ctx, ex, ey, ew * efrac, eh, 2); ctx.fill();
+
+  // end-of-episode banner
+  if (banner && pauseFrames > 0) {
+    ctx.font = "bold 22px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    const tw = ctx.measureText(banner.text).width;
+    ctx.fillStyle = "rgba(8,12,26,0.78)";
+    roundRect(ctx, rect.width / 2 - tw / 2 - 16, 14, tw + 32, 38, 8);
+    ctx.fill();
+    ctx.fillStyle = banner.color;
+    ctx.fillText(banner.text, rect.width / 2, 40);
+    ctx.textAlign = "left";
+  }
 }
 
 function roundRect(c, x, y, w, h, r) {
@@ -149,18 +179,30 @@ let demoEnv = new StairClimbEnv();
 demoEnv.seed(99);
 let demoObs = demoEnv.reset();
 let pauseFrames = 0;
+let banner = null;   // {text, color, ok} shown when an episode ends
 
 function tickDemo() {
+  // Hold the final frame (with banner) for a beat, then reset for a new attempt.
+  if (pauseFrames > 0) {
+    pauseFrames--;
+    if (pauseFrames === 0) { demoObs = demoEnv.reset(); banner = null; }
+    return;
+  }
   const stepsPerFrame = parseInt(els.speed.value, 10);
   for (let k = 0; k < stepsPerFrame; k++) {
-    if (pauseFrames > 0) { pauseFrames--; break; }
     const a = agent.act(demoObs, els.greedy.checked);
     const res = demoEnv.step(a);
     demoObs = res.obs;
     if (res.done) {
       lastInfo = res.info;
-      pauseFrames = 30;
-      demoObs = demoEnv.reset();
+      if (res.info.reachedGoal) {
+        banner = { text: "✓ REACHED THE TOP!", color: "#3ddc84", ok: true };
+      } else if (res.info.collapsed) {
+        banner = { text: "✗ OUT OF ENERGY — collapsed", color: "#ff5d5d", ok: false };
+      } else {
+        banner = { text: "✗ TIMED OUT", color: "#ffb05d", ok: false };
+      }
+      pauseFrames = 45;
       break;
     }
   }
@@ -200,7 +242,10 @@ function trainChunk(remaining, total, trainEnv, recent) {
     els.greedy.checked = true;
     return;
   }
-  const chunk = Math.min(150, remaining);
+  // Small chunks with a frame-ish delay so training is spread over a few
+  // seconds -- the live robot (which shares this agent) is visibly clumsy and
+  // collapses early, then climbs cleanly as exploration decays.
+  const chunk = Math.min(25, remaining);
   for (let i = 0; i < chunk; i++) {
     const info = runEpisode(trainEnv, agent, true);
     recent.push(info.reachedGoal ? 1 : 0);
@@ -214,9 +259,9 @@ function trainChunk(remaining, total, trainEnv, recent) {
   els.episodes.textContent = done;
   els.success.textContent = (succ * 100).toFixed(0) + "%";
   els.epsilon.textContent = agent.epsilon.toFixed(3);
-  els.status.textContent = `Training… ${done}/${total}`;
+  els.status.textContent = `Training… ${done}/${total} — watch it improve!`;
 
-  setTimeout(() => trainChunk(remaining - chunk, total, trainEnv, recent), 0);
+  setTimeout(() => trainChunk(remaining - chunk, total, trainEnv, recent), 16);
 }
 
 function startTraining() {
@@ -275,10 +320,10 @@ els.reset.addEventListener("click", () => {
   els.greedy.checked = false;
   els.train.disabled = false;
   els.train.textContent = "Train (5000 episodes)";
-  els.status.textContent = "Untrained — random flailing. Hit Train.";
+  els.status.textContent = "Untrained — acting randomly: it often runs out of energy and collapses. Hit Train to watch it learn.";
 });
 window.addEventListener("resize", drawCurve);
 
-els.status.textContent = "Untrained — random flailing. Hit Train.";
+els.status.textContent = "Untrained — acting randomly: it often runs out of energy and collapses. Hit Train to watch it learn.";
 drawCurve();
 loop();
