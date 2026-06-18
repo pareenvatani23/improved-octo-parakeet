@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Robot Stairs RL Sim</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0b1020;
+    color: #e6ebff;
+    line-height: 1.5;
+  }
+  header {
+    padding: 22px 20px 6px;
+    text-align: center;
+  }
+  h1 { margin: 0; font-size: 1.6rem; }
+  header p { margin: 6px auto 0; max-width: 680px; color: #9fb0e0; font-size: 0.95rem; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 16px; }
+  .panel {
+    background: #121a33;
+    border: 1px solid #243358;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  canvas#view {
+    width: 100%;
+    height: 420px;
+    border-radius: 10px;
+    display: block;
+  }
+  canvas#curve {
+    width: 100%;
+    height: 120px;
+    border-radius: 8px;
+    display: block;
+    margin-top: 6px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    margin-top: 12px;
+  }
+  button {
+    background: #3a6df0;
+    color: #fff;
+    border: 0;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    border-radius: 9px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:hover { background: #2f5fd6; }
+  button:disabled { background: #2a3556; cursor: default; }
+  button.secondary { background: #2a3556; }
+  button.secondary:hover { background: #34406b; }
+  label { font-size: 0.9rem; color: #b8c4ea; display: flex; align-items: center; gap: 6px; }
+  input[type=range] { accent-color: #3a6df0; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .stat {
+    background: #0e1630;
+    border: 1px solid #243358;
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+  }
+  .stat .k { font-size: 0.72rem; color: #8090c0; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+  #status { margin-top: 12px; color: #ffd166; font-weight: 600; min-height: 1.2em; }
+  .legend { font-size: 0.85rem; color: #93a2d4; margin-top: 6px; }
+  footer { text-align: center; color: #6b78a8; font-size: 0.82rem; padding: 8px 0 28px; }
+  a { color: #79a0ff; }
+  code { background: #0e1630; padding: 1px 6px; border-radius: 5px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🤖 Robot Stairs — Reinforcement Learning</h1>
+    <p>
+      A 2D robot learns to climb a staircase from scratch with tabular
+      Q-learning. Everything — the physics and the learning — runs live in your
+      browser. Hit <strong>Train</strong> and watch it go from random flailing
+      to a clean hopping gait.
+    </p>
+  </header>
+
+  <div class="wrap">
+    <div class="panel">
+      <canvas id="view"></canvas>
+      <div class="legend">
+        Green bar = stamina (jumps &amp; moving cost energy; run out and the
+        robot collapses). The flag marks the goal platform.
+      </div>
+
+      <div class="controls">
+        <button id="trainBtn">Train (5000 episodes)</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+        <label><input type="checkbox" id="greedy" /> Greedy (no exploration)</label>
+        <label>Speed
+          <input type="range" id="speed" min="1" max="8" value="2" />
+        </label>
+      </div>
+
+      <div id="status"></div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Episodes</div><div class="v" id="episodes">0</div></div>
+        <div class="stat"><div class="k">Success rate</div><div class="v" id="success">—</div></div>
+        <div class="stat"><div class="k">Stairs (live)</div><div class="v" id="stairs">0/6</div></div>
+        <div class="stat"><div class="k">Epsilon</div><div class="v" id="epsilon">1.000</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Learning curve</strong>
+      <canvas id="curve"></canvas>
+    </div>
+
+    <div class="panel">
+      <strong>How it works</strong>
+      <p style="color:#b8c4ea; font-size:0.92rem;">
+        The robot observes its position within the current step, its velocity,
+        whether it's grounded, and remaining stamina — all relative to the
+        current stair, so one compact policy generalises to every step. It
+        chooses among <code>IDLE</code>, <code>WALK</code>, <code>JUMP</code>,
+        and <code>JUMP&nbsp;RIGHT</code>. Weak air control means it must build a
+        run-up before leaping, and solid risers block walking through — so it
+        has to learn to time a momentum-assisted hop at each stair. Random play
+        only reaches the top ~55% of the time; a trained agent ≈100%.
+      </p>
+    </div>
+
+    <footer>
+      Source &amp; the original Python version are in the repository.
+      Built with Q-learning, no frameworks.
+    </footer>
+  </div>
+
+  <script src="sim.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

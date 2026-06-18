@@ -10,6 +10,22 @@ optional plots), so it trains in seconds on a laptop.
 *The red line is the path of a trained agent: it learns a hopping gait — one
 ballistic arc per stair — to climb to the top platform.*
 
+## 🌐 Live web demo
+
+There's a zero-install browser version in [`docs/`](docs/) — the environment and
+the Q-learning agent are ported to JavaScript, so the robot **trains and runs
+live in your browser** on a canvas (no backend). Hit *Train* and watch it go
+from random flailing to a clean hopping gait, with a live learning curve.
+
+> **Live URL (once Pages is enabled):**
+> https://pareenvatani23.github.io/improved-octo-parakeet/
+
+Run it locally with any static server:
+
+```bash
+python -m http.server -d docs 8000   # then open http://localhost:8000
+```
+
 ## The idea
 
 The robot is a point body with position `(x, y)` and velocity `(vx, vy)` in a
