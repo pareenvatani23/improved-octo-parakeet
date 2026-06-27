@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Maze Escape — Reinforcement Learning</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1020; color: #e6ebff; line-height: 1.5; }
+  header { padding: 22px 20px 6px; text-align: center; }
+  h1 { margin: 0; font-size: 1.6rem; }
+  header p { margin: 6px auto 0; max-width: 700px; color: #9fb0e0; font-size: 0.95rem; }
+  .nav { text-align: center; margin: 10px 0 0; font-size: 0.9rem; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 16px; }
+  .panel { background: #121a33; border: 1px solid #243358; border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+  canvas#view { width: 100%; height: 480px; border-radius: 10px; display: block; }
+  canvas#curve { width: 100%; height: 120px; border-radius: 8px; display: block; margin-top: 6px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; }
+  button { background: #3a6df0; color: #fff; border: 0; padding: 10px 16px; font-size: 0.95rem; border-radius: 9px; cursor: pointer; font-weight: 600; }
+  button:hover { background: #2f5fd6; }
+  button:disabled { background: #2a3556; cursor: default; }
+  button.secondary { background: #2a3556; }
+  label { font-size: 0.9rem; color: #b8c4ea; display: flex; align-items: center; gap: 6px; }
+  input[type=range] { accent-color: #3a6df0; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+  .stat { background: #0e1630; border: 1px solid #243358; border-radius: 10px; padding: 10px; text-align: center; }
+  .stat .k { font-size: 0.72rem; color: #8090c0; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+  #status { margin-top: 12px; color: #ffd166; font-weight: 600; min-height: 1.2em; }
+  .legend { font-size: 0.85rem; color: #93a2d4; margin-top: 6px; }
+  .thoughts { margin-top: 14px; background: #0e1630; border: 1px solid #243358; border-radius: 10px; padding: 12px 14px; }
+  .thoughts-title { font-weight: 700; margin-bottom: 8px; }
+  .thoughts p { margin: 7px 0; font-size: 0.95rem; color: #dfe6ff; display: flex; gap: 10px; align-items: baseline; }
+  .tlabel { flex: 0 0 92px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; padding: 2px 0; }
+  .tlabel.last { color: #79a0ff; }
+  .tlabel.plan { color: #ffd166; }
+  .tlabel.realize { color: #3ddc84; }
+  .realwrap { display: flex; gap: 10px; align-items: baseline; margin: 7px 0; }
+  .thoughtlog { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .thoughtlog .entry { font-size: 0.9rem; font-style: italic; transition: opacity .3s; }
+  .thoughtlog .entry.ok { color: #3ddc84; }
+  .thoughtlog .entry.fail { color: #ff8a8a; }
+  .thoughtlog .entry.neutral { color: #b8c4ea; }
+  .thoughtlog .entry .cnt { font-style: normal; font-weight: 700; opacity: 0.8; }
+  footer { text-align: center; color: #6b78a8; font-size: 0.82rem; padding: 8px 0 28px; }
+  a { color: #79a0ff; }
+  code { background: #0e1630; padding: 1px 6px; border-radius: 5px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🧩 3D Maze Escape — Reinforcement Learning</h1>
+    <p>
+      A robot must escape a multi-floor maze, learning the route from scratch
+      with tabular Q-learning. The maze, the agent, and the learning all run live
+      in your browser. Hit <strong>Train</strong> and watch it go from hopeless
+      wandering to a confident beeline for the exit.
+    </p>
+    <div class="nav"><a href="./">← Stairs-climbing version</a></div>
+  </header>
+
+  <div class="wrap">
+    <div class="panel">
+      <canvas id="view"></canvas>
+      <div class="legend">
+        Blue pad = start · pulsing green <strong>EXIT</strong> = goal ·
+        <span style="color:#ffd166">▲</span>/<span style="color:#7fd1ff">▼</span> = shafts between floors ·
+        teal pads = cells it has visited this attempt. Each step costs the robot,
+        so it's rewarded for the <em>shortest</em> escape.
+      </div>
+
+      <div class="controls">
+        <button id="trainBtn">Train (6000 episodes)</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+        <label><input type="checkbox" id="greedy" /> Greedy (no exploration)</label>
+        <label>Speed <input type="range" id="speed" min="1" max="8" value="3" /></label>
+      </div>
+
+      <div id="status"></div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Episodes</div><div class="v" id="episodes">0</div></div>
+        <div class="stat"><div class="k">Escape rate</div><div class="v" id="success">—</div></div>
+        <div class="stat"><div class="k">Best route</div><div class="v" id="best">—</div></div>
+        <div class="stat"><div class="k">Epsilon</div><div class="v" id="epsilon">1.000</div></div>
+      </div>
+
+      <div class="thoughts">
+        <div class="thoughts-title">🧠 Robot's thoughts</div>
+        <p><span class="tlabel last">Last move</span><span id="thoughtLast">…</span></p>
+        <p><span class="tlabel plan">Plan</span><span id="thoughtPlan">…</span></p>
+        <div class="realwrap">
+          <span class="tlabel realize">Realisations</span>
+          <div id="thoughtLog" class="thoughtlog">…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Learning curve</strong>
+      <canvas id="curve"></canvas>
+    </div>
+
+    <div class="panel">
+      <strong>How it works</strong>
+      <p style="color:#b8c4ea; font-size:0.92rem;">
+        Each floor is a perfect maze of corridors; floors are linked by vertical
+        shafts. The robot's state is simply which cell it's in (floor, row,
+        column), and it picks among six moves — north, south, east, west, up, down.
+        It only learns from reward: −1 for every step and +100 for reaching the
+        exit. Through Q-learning it gradually builds a map of which move is best
+        from each cell, converging on the shortest escape. Random wandering almost
+        never escapes within the move budget; a trained agent escapes every time.
+      </p>
+    </div>
+
+    <footer>Self-contained isometric renderer + tabular Q-learning. No frameworks.</footer>
+  </div>
+
+  <script src="maze.js"></script>
+  <script src="mazeapp.js"></script>
+</body>
+</html>

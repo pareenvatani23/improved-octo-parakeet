@@ -20,6 +20,14 @@ from random flailing to a clean hopping gait, with a live learning curve.
 > **Live URL (once Pages is enabled):**
 > https://pareenvatani23.github.io/improved-octo-parakeet/
 
+There are two browser demos, both with a live "robot's thoughts" narration panel:
+
+- **Stairs climb** (home page) — a 2D robot learns a hopping gait to climb stairs.
+- **3D maze escape** — [`docs/maze.html`](docs/maze.html) — a robot learns to escape a
+  multi-floor maze, rendered with a self-contained isometric 3D view. Random
+  wandering almost never escapes; a trained agent escapes every time via the
+  shortest route.
+
 Run it locally with any static server:
 
 ```bash
