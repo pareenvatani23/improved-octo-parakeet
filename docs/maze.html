@@ -16,6 +16,7 @@
   .panel { background: #121a33; border: 1px solid #243358; border-radius: 14px; padding: 14px; margin-bottom: 16px; }
   canvas#view { width: 100%; height: 480px; border-radius: 10px; display: block; }
   canvas#curve { width: 100%; height: 120px; border-radius: 8px; display: block; margin-top: 6px; }
+  canvas#brain { width: 100%; height: 300px; border-radius: 8px; display: block; margin-top: 6px; }
   .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; }
   button { background: #3a6df0; color: #fff; border: 0; padding: 10px 16px; font-size: 0.95rem; border-radius: 9px; cursor: pointer; font-weight: 600; }
   button:hover { background: #2f5fd6; }
@@ -94,6 +95,20 @@
           <span class="tlabel realize">Realisations</span>
           <div id="thoughtLog" class="thoughtlog">…</div>
         </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>🧠 The brain — a neural network learning the value of every move</strong>
+      <canvas id="brain"></canvas>
+      <div class="legend">
+        Left = one input neuron per maze cell (the lit gold one is where the
+        robot is now). Middle = the network's hidden neurons (blue = negative,
+        orange = positive activation). Right = its estimated value for each of
+        the 6 moves; the brightest green is the move it picks. Lines are the
+        learned connection weights — they start near zero and strengthen as it
+        trains. The network is distilled live from the agent's experience, so
+        you watch the brain form as the escape rate climbs.
       </div>
     </div>
 
