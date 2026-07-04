@@ -134,17 +134,24 @@
         probability. It reliably converges on the top ~0.01% of a
         46,656-combination space.
         <br><br>
-        <strong>Caveat:</strong> the Hit Score is a heuristic proxy built from
-        assumed factor weights — a structured hypothesis engine, <em>not</em> a
-        market oracle. Real numbers (search volume, competition) could be wired in
-        via live keyword-data APIs to ground it; treat the output as a ranked set
-        of hypotheses to validate, not a guarantee.
+        <strong>Data grounding:</strong> <span id="grounding">checking…</span>
+        The pipeline is wired to consume real numbers — each feature maps to a
+        target keyword, and <em>demand</em> comes from real search volume while
+        <em>competition</em> comes from real keyword difficulty as soon as a
+        <code>keyword_data.js</code> table is supplied (see
+        <code>tools/build_keyword_data.mjs</code>).
+        <br><br>
+        <strong>Caveat:</strong> where a feature isn't grounded, its demand and
+        competition are heuristic estimates — a structured hypothesis engine,
+        <em>not</em> a market oracle. Treat the output as a ranked set of
+        hypotheses to validate, not a guarantee.
       </p>
     </div>
 
     <footer>Policy-gradient RL over a combinatorial idea space. No frameworks, no web search.</footer>
   </div>
 
+  <script src="keyword_data.js"></script>
   <script src="ideas.js"></script>
   <script src="ideasapp.js"></script>
 </body>

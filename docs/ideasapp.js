@@ -1,7 +1,17 @@
 /* UI + policy visualisation + narration for the App-Idea RL finder. */
 "use strict";
 
-const { DIMENSIONS, scoreIdea, PolicyAgent, totalIdeas, describeIdea } = window.IdeaRL;
+const { DIMENSIONS, scoreIdea, PolicyAgent, totalIdeas, describeIdea, groundingStatus } = window.IdeaRL;
+
+// reflect real-data grounding status in the caveat panel
+(function () {
+  const el = document.getElementById("grounding");
+  if (!el || !groundingStatus) return;
+  const g = groundingStatus();
+  el.textContent = g.grounded > 0
+    ? `${g.grounded} of ${g.groundable} keyword-driven features are grounded in real search-volume / difficulty data. `
+    : `Currently running on modeled estimates — no live keyword data is loaded (0 of ${g.groundable} features grounded). `;
+})();
 
 let agent = new PolicyAgent({ seed: 7 });
 let running = false;

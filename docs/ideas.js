@@ -104,6 +104,63 @@ const SYNERGIES = [
   { vals: ["AI companion / coach", "Mental health & ADHD focus"], bonus: 0.6, why: "AI coaching fits the mental-health surge" },
 ];
 
+// --- real-keyword-data wiring ----------------------------------------------
+// Each groundable feature maps to a target keyword. When live metrics are
+// supplied (globalThis.KEYWORD_DATA = { "<keyword>": {volume, difficulty} },
+// e.g. loaded from keyword_data.js populated by Ahrefs/Semrush), the value's
+// demand is derived from real search volume and its competition from real
+// keyword difficulty. Absent data, the authored estimate is used.
+const KW = {
+  "AI agents that do tasks for you": "ai agent",
+  "Longevity & healthspan": "longevity",
+  "Mental health & ADHD focus": "adhd",
+  "Creator economy tools": "creator economy",
+  "Financial independence": "financial independence",
+  "Dating & loneliness": "dating app",
+  "AI companion / coach": "ai companion",
+  "Shareable AI generator": "ai image generator",
+  "Habit streaks": "habit tracker",
+  "Gamified challenge": "gamification app",
+  "Tracker & insights": "sleep tracker",
+  "Marketplace / matching": "marketplace app",
+  "AI chat / voice-first": "ai chatbot",
+  "Short-video native": "short video app",
+  "Camera / AR": "augmented reality app",
+  "Lockscreen / widget": "widget app",
+  "Wearable companion": "smartwatch app",
+  "Simple utility app": "utility app",
+};
+
+function demandFromVolume(v) {
+  // log-normalise monthly search volume to 0..1 (200 -> ~0, 1M -> ~1)
+  const x = Math.log10(Math.max(10, v));
+  return Math.max(0.05, Math.min(1, (x - 2.3) / (6 - 2.3)));
+}
+
+let GROUNDED = 0;
+function applyGrounding() {
+  const data = (typeof globalThis !== "undefined" && globalThis.KEYWORD_DATA) || {};
+  GROUNDED = 0;
+  for (const dim of DIMENSIONS) {
+    for (const val of dim.values) {
+      val.kw = KW[val.label] || null;
+      val.grounded = false;
+      const rec = val.kw && data[val.kw];
+      if (rec) {
+        if (typeof rec.volume === "number") { val.d = demandFromVolume(rec.volume); val.volume = rec.volume; }
+        if (typeof rec.difficulty === "number") { val.c = Math.max(0, Math.min(1, rec.difficulty / 100)); val.kd = rec.difficulty; }
+        if (typeof rec.volume === "number" || typeof rec.difficulty === "number") { val.grounded = true; GROUNDED++; }
+      }
+    }
+  }
+  _cal = null; // force recalibration against grounded numbers
+}
+function groundingStatus() {
+  let total = 0;
+  for (const dim of DIMENSIONS) for (const v of dim.values) if (v.kw) total++;
+  return { grounded: GROUNDED, groundable: total };
+}
+
 const WEIGHTS = { d: 1.7, v: 1.6, c: 1.15, m: 0.95, f: 0.6 };
 const SPREAD = 1.5;
 
@@ -250,7 +307,9 @@ function describeIdea(choices) {
   return `A ${pick(2).toLowerCase()} app in ${pick(5).toLowerCase()} form for ${pick(1)}, built around ${pick(0).toLowerCase()}, that spreads via ${pick(3).toLowerCase()} and earns through ${pick(4).toLowerCase()}.`;
 }
 
-const IdeaRL = { DIMENSIONS, SYNERGIES, scoreIdea, ideaAttrs, PolicyAgent, totalIdeas, describeIdea };
+applyGrounding();  // consume live keyword data if present; else authored estimates
+
+const IdeaRL = { DIMENSIONS, SYNERGIES, scoreIdea, ideaAttrs, PolicyAgent, totalIdeas, describeIdea, applyGrounding, groundingStatus, KW };
 if (typeof globalThis !== "undefined") globalThis.IdeaRL = IdeaRL;
 if (typeof module !== "undefined" && module.exports) module.exports = IdeaRL;
 
