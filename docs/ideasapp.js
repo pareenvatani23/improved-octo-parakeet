@@ -8,9 +8,10 @@ const { DIMENSIONS, scoreIdea, PolicyAgent, totalIdeas, describeIdea, groundingS
   const el = document.getElementById("grounding");
   if (!el || !groundingStatus) return;
   const g = groundingStatus();
+  const src = (typeof globalThis !== "undefined" && globalThis.KEYWORD_DATA_SOURCE) || "";
   el.textContent = g.grounded > 0
-    ? `${g.grounded} of ${g.groundable} keyword-driven features are grounded in real search-volume / difficulty data. `
-    : `Currently running on modeled estimates — no live keyword data is loaded (0 of ${g.groundable} features grounded). `;
+    ? `${g.grounded} of ${g.groundable} keyword-driven features are grounded in search-volume / difficulty data${src ? ` — source: ${src}` : ""}. `
+    : `Currently running on modeled estimates — no keyword data is loaded (0 of ${g.groundable} features grounded). `;
 })();
 
 let agent = new PolicyAgent({ seed: 7 });

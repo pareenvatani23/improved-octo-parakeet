@@ -58,7 +58,8 @@ for (const r of rows) {
   if (Object.keys(rec).length) data[kw] = rec;
 }
 
-const out = `/* Auto-generated from ${path.basename(csvPath)} by tools/build_keyword_data.mjs. */\nglobalThis.KEYWORD_DATA = ${JSON.stringify(data, null, 2)};\n`;
+const src = `Keyword-tool export: ${path.basename(csvPath)}`;
+const out = `/* Auto-generated from ${path.basename(csvPath)} by tools/build_keyword_data.mjs. */\nglobalThis.KEYWORD_DATA_SOURCE = ${JSON.stringify(src)};\nglobalThis.KEYWORD_DATA = ${JSON.stringify(data, null, 2)};\n`;
 const outPath = path.join(__dirname, "..", "docs", "keyword_data.js");
 fs.writeFileSync(outPath, out);
 console.log(`wrote ${Object.keys(data).length}/${WANTED.size} grounded keywords -> ${outPath}`);

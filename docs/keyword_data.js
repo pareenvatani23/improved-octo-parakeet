@@ -1,21 +1,35 @@
-/* Live keyword metrics for the App-Idea RL model.
+/* Keyword metrics for the App-Idea RL model.
  *
- * Populate this map to ground the model in REAL data. Keys are the target
- * keywords from IdeaRL.KW; each value carries:
- *   volume     — average monthly search volume (integer)
- *   difficulty — keyword difficulty / competition, 0..100
+ * SOURCE: approximate, search-informed estimates compiled July 2026. These are
+ * order-of-magnitude US monthly search volumes and 0-100 difficulty scores,
+ * reconciled from public web signals — NOT tool-grade figures from a single
+ * keyword provider (Ahrefs/Semrush access was unavailable). Treat as a grounded
+ * hypothesis layer, not exact market data. Replace this file with a keyword-tool
+ * export via tools/build_keyword_data.mjs for precise numbers.
  *
- * When present, `volume` overrides a feature's demand and `difficulty`
- * overrides its competition. Anything missing falls back to the modeled
- * estimate. Generate this file from a keyword-tool export with
- * tools/build_keyword_data.mjs, or edit by hand, e.g.:
- *
- *   globalThis.KEYWORD_DATA = {
- *     "ai agent":  { volume: 74000, difficulty: 61 },
- *     "adhd":      { volume: 301000, difficulty: 43 },
- *   };
- *
- * It is intentionally empty right now — no live keyword-data provider was
- * available in the build environment (Ahrefs/Semrush MCP required a paid plan).
+ * volume = approx. US monthly searches; difficulty = keyword difficulty 0..100.
  */
-globalThis.KEYWORD_DATA = {};
+globalThis.KEYWORD_DATA_SOURCE = "Approximate, search-informed estimates (Jul 2026) — not tool-grade";
+globalThis.KEYWORD_DATA = {
+  // trend hooks
+  "ai agent":               { volume: 110000, difficulty: 66 },
+  "longevity":              { volume: 60000,  difficulty: 42 },
+  "adhd":                   { volume: 500000, difficulty: 58 },
+  "creator economy":        { volume: 12000,  difficulty: 44 },
+  "financial independence": { volume: 33000,  difficulty: 40 },
+  "dating app":             { volume: 135000, difficulty: 82 },
+  // core mechanics
+  "ai companion":           { volume: 45000,  difficulty: 56 },
+  "ai image generator":     { volume: 350000, difficulty: 82 },
+  "habit tracker":          { volume: 70000,  difficulty: 56 },
+  "gamification app":       { volume: 2400,   difficulty: 34 },
+  "sleep tracker":          { volume: 45000,  difficulty: 52 },
+  "marketplace app":        { volume: 6600,   difficulty: 46 },
+  // formats
+  "ai chatbot":             { volume: 250000, difficulty: 78 },
+  "short video app":        { volume: 8100,   difficulty: 46 },
+  "augmented reality app":  { volume: 5400,   difficulty: 42 },
+  "widget app":             { volume: 27000,  difficulty: 40 },
+  "smartwatch app":         { volume: 18000,  difficulty: 42 },
+  "utility app":            { volume: 3600,   difficulty: 34 },
+};
