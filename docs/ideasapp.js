@@ -1,7 +1,8 @@
 /* UI + policy visualisation + narration for the App-Idea RL finder. */
 "use strict";
 
-const { DIMENSIONS, scoreIdea, PolicyAgent, totalIdeas, describeIdea, groundingStatus } = window.IdeaRL;
+const { DIMENSIONS, scoreIdea, priorityFast, PolicyAgent, totalIdeas, describeIdea, groundingStatus } = window.IdeaRL;
+const arrow = (g) => (g > 0.25 ? "↑ rising" : g < -0.1 ? "↓ fading" : "→ flat");
 
 // reflect real-data grounding status in the caveat panel
 (function () {
@@ -58,14 +59,14 @@ function considerIdea(choices) {
   const key = keyOf(choices);
   if (topIdeas.some(t => t.key === key)) return;
   const s = scoreIdea(choices);
-  topIdeas.push({ key, choices, hit: s.hit, k: s.k, confidence: s.confidence, synergies: s.synergies });
-  topIdeas.sort((a, b) => b.hit - a.hit);
+  topIdeas.push({ key, choices, priority: s.priority, band: s.band, k: s.k, momentum: s.momentum, synergies: s.synergies });
+  topIdeas.sort((a, b) => b.priority - a.priority);
   if (topIdeas.length > 6) topIdeas.length = 6;
 
-  if (s.hit > bestEver + 1e-9) {
-    bestEver = s.hit; bestChoices = choices;
+  if (s.priority > bestEver + 1e-9) {
+    bestEver = s.priority; bestChoices = choices;
     let why = s.synergies.length ? ` Synergy fired — ${s.synergies[0].why}.` : "";
-    logIt(`New #1 (Hit ${s.hit.toFixed(0)}, virality k≈${s.k.toFixed(2)}): ${describeIdea(choices)}${why}`, true);
+    logIt(`New #1 (priority ${s.priority.toFixed(0)}, band ${s.band[0]}–${s.band[1]}, ${arrow(s.momentum)}): ${describeIdea(choices)}${why}`, true);
   }
 }
 
@@ -81,7 +82,7 @@ function chunk() {
     evaluated += agent.batch;
     lastMean = r.mean;
     considerIdea(r.bestChoices);
-    lastSample = r.bestChoices; lastScore = scoreIdea(r.bestChoices).hit;
+    lastSample = r.bestChoices; lastScore = priorityFast(r.bestChoices);
   }
   considerIdea(agent.greedyIdea());
   history.push({ avg: lastMean, best: bestEver });
@@ -142,13 +143,14 @@ function renderBoard() {
   if (!topIdeas.length) { els.board.innerHTML = `<div class="empty">No ideas yet — hit Search.</div>`; return; }
   els.board.innerHTML = topIdeas.map((t, i) => {
     const syn = t.synergies.length ? `<div class="isyn">✦ ${esc(t.synergies.map(s => s.why).join(" · "))}</div>` : "";
+    const band = t.band ? `${t.band[0]}–${t.band[1]}` : "—";
     return `<div class="idea">
       <div class="irank">#${i + 1}</div>
       <div class="ibody">
         <div class="idesc">${esc(describeIdea(t.choices))}</div>
         ${syn}
       </div>
-      <div class="iscore"><div class="ihit">${t.hit.toFixed(0)}</div><div class="imeta">k≈${t.k.toFixed(2)} · ${t.confidence}% conf</div></div>
+      <div class="iscore"><div class="ihit">${t.priority.toFixed(0)}</div><div class="imeta">band ${band} · k≈${t.k.toFixed(2)} · ${esc(arrow(t.momentum))}</div></div>
     </div>`;
   }).join("");
 }
@@ -156,13 +158,13 @@ function renderBoard() {
 // --- thoughts ---------------------------------------------------------------
 function updateThoughts() {
   els.thoughtLast.textContent = lastSample
-    ? `I just tested: ${describeIdea(lastSample)} → Hit ${lastScore.toFixed(0)}.`
+    ? `I just tested: ${describeIdea(lastSample)} → priority ${lastScore.toFixed(0)}.`
     : "Waiting to start…";
   // plan: the currently most-likely (greedy) idea
   const g = agent.greedyIdea();
   const gs = scoreIdea(g);
   els.thoughtPlan.textContent = running || iters > 0
-    ? `My current front-runner (Hit ${gs.hit.toFixed(0)}, k≈${gs.k.toFixed(2)}): ${describeIdea(g)}`
+    ? `My current front-runner (priority ${gs.priority.toFixed(0)}, band ${gs.band[0]}–${gs.band[1]}, ${arrow(gs.momentum)}): ${describeIdea(g)}`
     : "I'll test thousands of combinations and let the numbers pull me toward the best.";
   const entries = realLog.slice().reverse();
   els.thoughtLog.innerHTML = entries.map((e, i) => {
@@ -179,8 +181,8 @@ function drawCurve() {
   cctx.clearRect(0, 0, rect.width, rect.height);
   cctx.fillStyle = "rgba(255,255,255,0.04)"; cctx.fillRect(0, 0, rect.width, rect.height);
   cctx.fillStyle = "#7d8bb5"; cctx.font = "11px system-ui, sans-serif";
-  cctx.fillText("Hit 100", 2, 12); cctx.fillText("0", 2, rect.height - 3);
-  cctx.fillText("best (green) & batch-avg (blue) Hit Score", rect.width - 240, 12);
+  cctx.fillText("100", 2, 12); cctx.fillText("0", 2, rect.height - 3);
+  cctx.fillText("best (green) & batch-avg (blue) priority", rect.width - 230, 12);
   if (history.length < 2) return;
   const plot = (key, col) => {
     cctx.strokeStyle = col; cctx.lineWidth = 2; cctx.beginPath();

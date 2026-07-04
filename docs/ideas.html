@@ -61,6 +61,7 @@
   .thoughtlog .entry { font-size: 0.88rem; font-style: italic; }
   .thoughtlog .entry.ok { color: #3ddc84; } .thoughtlog .entry.neutral { color: #b8c4ea; }
   .note { font-size: 0.82rem; color: #93a2d4; }
+  .disclaimer { background: #2a1e12; border: 1px solid #6b4a1f; color: #ffcf99; border-radius: 12px; padding: 12px 14px; font-size: 0.9rem; }
   footer { text-align: center; color: #6b78a8; font-size: 0.82rem; padding: 8px 0 28px; }
   a { color: #79a0ff; }
 </style>
@@ -79,6 +80,16 @@
   </header>
 
   <div class="wrap">
+    <div class="disclaimer">
+      ⚠️ <strong>This is a structured prioritisation rubric for generating
+      hypotheses to validate — not a prediction of success or investment advice.</strong>
+      The score ranks ideas by a transparent, partly-estimated model; treat a high
+      score as "worth testing", never "worth funding". Always validate with real
+      demand signals (landing-page / ad tests) before spending.
+    </div>
+  </div>
+
+  <div class="wrap">
     <div class="panel">
       <div class="controls">
         <button id="runBtn">Search for a hit idea</button>
@@ -88,7 +99,7 @@
       <div id="status"></div>
       <div class="stats">
         <div class="stat"><div class="k">Learning steps</div><div class="v" id="iters">0</div></div>
-        <div class="stat"><div class="k">Best Hit Score</div><div class="v" id="best">—</div></div>
+        <div class="stat"><div class="k">Best priority</div><div class="v" id="best">—</div></div>
         <div class="stat"><div class="k">Batch avg</div><div class="v" id="avg">—</div></div>
         <div class="stat"><div class="k">Ideas tested</div><div class="v" id="evaluated">0</div></div>
       </div>
@@ -126,13 +137,18 @@
     <div class="panel">
       <strong class="h">How it works &amp; honest caveats</strong>
       <p class="note">
-        Each idea is scored by a transparent model: <em>Hit Score = f(demand ×
-        trend momentum, virality coefficient, −competition, monetization,
-        feasibility) + discovered synergies</em>, self-calibrated so the average
-        idea ≈ 50. The agent uses policy-gradient RL (REINFORCE): it samples whole
-        ideas, and for choices that beat its running average it raises their
-        probability. It reliably converges on the top ~0.01% of a
-        46,656-combination space.
+        Each idea gets a <em>priority</em> from a transparent model:
+        <em>f(demand, virality, −competition, monetization, feasibility,
+        + momentum) + discovered synergies</em>, self-calibrated so the average
+        idea ≈ 50. <strong>Momentum</strong> (growth direction) is weighted
+        heavily, so a smaller-but-<em>rising</em> niche can out-rank a huge but
+        flat/saturated one. Each score carries an <strong>uncertainty band</strong>
+        (10th–90th percentile) from Monte-Carlo-perturbing the inputs and weights
+        by their real uncertainty — grounded inputs wobble less, the estimated
+        momentum wobbles most, so a <em>wide band means don't over-trust the
+        number</em>. The agent uses policy-gradient RL (REINFORCE): it samples
+        whole ideas and raises the probability of choices that beat its running
+        average, converging on the top of a 46,656-combination space.
         <br><br>
         <strong>Data grounding:</strong> <span id="grounding">checking…</span>
         The pipeline is wired to consume real numbers — each feature maps to a

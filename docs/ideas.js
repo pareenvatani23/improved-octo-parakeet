@@ -146,9 +146,11 @@ function applyGrounding() {
       val.kw = KW[val.label] || null;
       val.grounded = false;
       const rec = val.kw && data[val.kw];
+      val.g = 0;
       if (rec) {
         if (typeof rec.volume === "number") { val.d = demandFromVolume(rec.volume); val.volume = rec.volume; }
         if (typeof rec.difficulty === "number") { val.c = Math.max(0, Math.min(1, rec.difficulty / 100)); val.kd = rec.difficulty; }
+        if (typeof rec.growth === "number") { val.g = Math.max(-1, Math.min(1, rec.growth)); }
         if (typeof rec.volume === "number" || typeof rec.difficulty === "number") { val.grounded = true; GROUNDED++; }
       }
     }
@@ -161,17 +163,23 @@ function groundingStatus() {
   return { grounded: GROUNDED, groundable: total };
 }
 
-const WEIGHTS = { d: 1.7, v: 1.6, c: 1.15, m: 0.95, f: 0.6 };
+// mo = momentum weight: rewards *growing* niches, not just big ones, so a
+// smaller-but-fast-rising space can out-prioritise a huge saturated one.
+const WEIGHTS = { d: 1.5, v: 1.5, c: 1.2, m: 0.95, f: 0.6, mo: 1.3 };
 const SPREAD = 1.5;
 
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+function clampPM(x) { return Math.max(-1, Math.min(1, x)); }
+function rawFrom(a, W) {
+  return W.d * a.demand + W.v * a.viral - W.c * a.comp + W.m * a.money + W.f * a.feas + W.mo * a.momentum;
+}
 
 // Raw (uncalibrated) score = weighted attributes + synergies.
 function rawCore(choices) {
   const a = ideaAttrs(choices);
   const syn = synergyScore(choices);
-  return { raw: WEIGHTS.d * a.demand + WEIGHTS.v * a.viral - WEIGHTS.c * a.comp
-    + WEIGHTS.m * a.money + WEIGHTS.f * a.feas + syn.total, a, syn };
+  return { raw: rawFrom(a, WEIGHTS) + syn.total, a, syn };
 }
 
 // Self-calibrate: standardise raw scores across the whole idea space so the
@@ -195,13 +203,18 @@ function calibrate() {
 
 // choices = array of value-indices, one per dimension
 function ideaAttrs(choices) {
-  const g = (dim, key) => DIMENSIONS[dim].values[choices[dim]][key];
+  const val = (dim) => DIMENSIONS[dim].values[choices[dim]];
+  const g = (dim, key) => val(dim)[key];
+  const gr = (dim) => val(dim).g || 0;                 // growth / momentum (-1..1)
   const demand = 0.4 * g(0, "d") + 0.25 * g(1, "d") + 0.2 * g(2, "d") + 0.15 * g(5, "d");
   const viral = 0.4 * g(3, "v") + 0.25 * g(1, "v") + 0.2 * g(2, "v") + 0.15 * g(5, "v");
   const comp = 0.4 * g(0, "c") + 0.35 * g(2, "c") + 0.25 * g(5, "c");
   const money = 0.6 * g(4, "m") + 0.4 * g(2, "m");
   const feas = 0.5 * g(2, "f") + 0.3 * g(5, "f") + 0.2 * g(4, "f");
-  return { demand, viral, comp, money, feas };
+  const momentum = 0.5 * gr(0) + 0.25 * gr(2) + 0.25 * gr(5);
+  // fraction of the groundable demand/competition inputs that are real-grounded
+  const gfrac = ([0, 2, 5].reduce((s, d) => s + (val(d).grounded ? 1 : 0), 0)) / 3;
+  return { demand, viral, comp, money, feas, momentum, gfrac };
 }
 
 function labelSet(choices) {
@@ -222,14 +235,61 @@ function synergyScore(choices) {
   return { total, hits };
 }
 
-function scoreIdea(choices) {
-  const { raw, a, syn } = rawCore(choices);
+function priorityFrom(raw) {
   const cal = calibrate();
-  const z = SPREAD * (raw - cal.mean) / cal.std;
-  const hit = 100 * sigmoid(z);
-  const k = 0.5 + 1.5 * a.viral;                 // projected virality coefficient
-  const confidence = Math.round(100 * Math.max(0.15, Math.min(0.95, 0.55 + 0.5 * a.feas - 0.4 * a.comp)));
-  return { hit, k, confidence, attrs: a, synergies: syn.hits, z };
+  return 100 * sigmoid(SPREAD * (raw - cal.mean) / cal.std);
+}
+
+// Fast point estimate (used by the RL agent while searching).
+function priorityFast(choices) {
+  return priorityFrom(rawCore(choices).raw);
+}
+
+// gaussian sampler (Box-Muller)
+let _z2 = null;
+function randn() {
+  if (_z2 !== null) { const z = _z2; _z2 = null; return z; }
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  const r = Math.sqrt(-2 * Math.log(u));
+  _z2 = r * Math.sin(2 * Math.PI * v);
+  return r * Math.cos(2 * Math.PI * v);
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// Full score with a MEANINGFUL uncertainty band: we Monte-Carlo the inputs and
+// weights by their real uncertainty (grounded inputs wobble less; momentum,
+// which is an estimate, wobbles most) and report the 10th-90th percentile of
+// the resulting priority. A wide band = "don't over-trust this number".
+function scoreIdea(choices, ci = true) {
+  const a = ideaAttrs(choices);
+  const synT = synergyScore(choices);
+  const priority = priorityFrom(rawFrom(a, WEIGHTS) + synT.total);
+  const k = 0.5 + 1.5 * a.viral;                 // projected virality coefficient (modeled)
+
+  let band = null;
+  if (ci) {
+    const N = 48;
+    const sD = lerp(0.19, 0.07, a.gfrac), sC = lerp(0.19, 0.07, a.gfrac);
+    const out = new Array(N);
+    for (let i = 0; i < N; i++) {
+      const ap = {
+        demand: clamp01(a.demand + randn() * sD),
+        viral: clamp01(a.viral + randn() * 0.15),
+        comp: clamp01(a.comp + randn() * sC),
+        money: clamp01(a.money + randn() * 0.15),
+        feas: clamp01(a.feas + randn() * 0.15),
+        momentum: clampPM(a.momentum + randn() * 0.22),
+      };
+      const jw = () => 1 + randn() * 0.15;
+      const W = { d: WEIGHTS.d * jw(), v: WEIGHTS.v * jw(), c: WEIGHTS.c * jw(), m: WEIGHTS.m * jw(), f: WEIGHTS.f * jw(), mo: WEIGHTS.mo * jw() };
+      out[i] = priorityFrom(rawFrom(ap, W) + synT.total);
+    }
+    out.sort((x, y) => x - y);
+    band = [Math.round(out[Math.floor(N * 0.1)]), Math.round(out[Math.ceil(N * 0.9) - 1])];
+  }
+  return { priority, band, k, momentum: a.momentum, grounded: a.gfrac, attrs: a, synergies: synT.hits };
 }
 
 // ------------------------------------------------------------------ agent
@@ -266,7 +326,7 @@ class PolicyAgent {
     let mean = 0, bestSc = -1, bestChoices = null;
     for (let b = 0; b < this.batch; b++) {
       const choices = this.sampleIdea();
-      const sc = scoreIdea(choices).hit;
+      const sc = priorityFast(choices);
       samples.push({ choices, sc });
       mean += sc;
       if (sc > bestSc) { bestSc = sc; bestChoices = choices; }
@@ -309,7 +369,7 @@ function describeIdea(choices) {
 
 applyGrounding();  // consume live keyword data if present; else authored estimates
 
-const IdeaRL = { DIMENSIONS, SYNERGIES, scoreIdea, ideaAttrs, PolicyAgent, totalIdeas, describeIdea, applyGrounding, groundingStatus, KW };
+const IdeaRL = { DIMENSIONS, SYNERGIES, scoreIdea, priorityFast, ideaAttrs, PolicyAgent, totalIdeas, describeIdea, applyGrounding, groundingStatus, KW };
 if (typeof globalThis !== "undefined") globalThis.IdeaRL = IdeaRL;
 if (typeof module !== "undefined" && module.exports) module.exports = IdeaRL;
 
