@@ -24,7 +24,7 @@ from sklearn.pipeline import Pipeline
 
 FEAT = Path("data/features.csv")
 TAXO_COLS = ["trend", "audience", "mechanic", "loop", "money", "format"]
-NUM_COLS = ["has_ai", "word_count"]
+CANDIDATE_NUM = ["has_ai", "word_count", "free", "offersIAP"]
 
 
 def topk_precision_lift(y_true, scores, base, frac=0.10):
@@ -40,6 +40,7 @@ def main():
         print(f"missing {FEAT} — run extract_features.py first", file=sys.stderr); sys.exit(1)
     df = pd.read_csv(FEAT)
     df = df.sort_values("created").reset_index(drop=True)
+    NUM_COLS = [c for c in CANDIDATE_NUM if c in df.columns]
     n = len(df)
     print(f"cohort: {n} apps | hits: {int(df.hit.sum())} ({df.hit.mean()*100:.1f}%)")
     if df.hit.sum() < 8 or n < 60:
@@ -83,6 +84,15 @@ def main():
     wc = test.word_count.values.astype(float)
     _, lift_wc, _ = topk_precision_lift(yte, wc, base)
     print(f"{'wordcount':<12} {'-':>7} {'-':>8} {'-':>11} {lift_wc:>5.2f}x   (dumb baseline)")
+
+    # ablation: does the IDEA TAXONOMY carry signal WITHOUT the length/other confounders?
+    taxo_pre = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), TAXO_COLS)])
+    taxo_m = Pipeline([("pre", taxo_pre), ("clf", GradientBoostingClassifier(random_state=0))])
+    taxo_m.fit(train[TAXO_COLS], ytr)
+    tp = taxo_m.predict_proba(test[TAXO_COLS])[:, 1]
+    taxo_roc = roc_auc_score(yte, tp) if len(np.unique(yte)) > 1 else float("nan")
+    _, taxo_lift, _ = topk_precision_lift(yte, tp, base)
+    print(f"{'TAXONOMY-only':<12} {'-':>7} {taxo_roc:>8.3f} {'-':>11} {taxo_lift:>5.2f}x   (the real question)")
 
     # interpretability: gradient-boost feature importances
     gb = models["grad_boost"]

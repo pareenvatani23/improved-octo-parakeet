@@ -1,0 +1,47 @@
+name: Fetch Google Play cohort
+
+# Pulls a varied Google Play cohort with REAL install-count labels on a
+# GH Actions runner (open internet), and commits data/googleplay_cohort.csv.
+
+on:
+  workflow_dispatch:
+    inputs:
+      max:
+        description: "Max apps to fetch"
+        default: "1200"
+      country:
+        description: "Store country"
+        default: "us"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scraper
+        run: npm init -y >/dev/null 2>&1 && npm i google-play-scraper@10 >/dev/null 2>&1 && echo installed
+
+      - name: Fetch cohort
+        run: node tools/fetch_googleplay.mjs "${{ github.event.inputs.max }}" "${{ github.event.inputs.country }}"
+
+      - name: Commit cohort CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # don't commit node_modules / package files from the runner
+          git checkout -- package.json package-lock.json 2>/dev/null || true
+          rm -rf node_modules package.json package-lock.json
+          git add data/googleplay_cohort.csv
+          if git diff --staged --quiet; then
+            echo "no changes"
+          else
+            git commit -m "data: Google Play cohort (real install labels)"
+            git push
+          fi
