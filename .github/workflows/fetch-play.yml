@@ -35,13 +35,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # don't commit node_modules / package files from the runner
-          git checkout -- package.json package-lock.json 2>/dev/null || true
           rm -rf node_modules package.json package-lock.json
           git add data/googleplay_cohort.csv
-          if git diff --staged --quiet; then
-            echo "no changes"
-          else
-            git commit -m "data: Google Play cohort (real install labels)"
-            git push
-          fi
+          if git diff --staged --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "data: Google Play cohort (real install labels)"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && { echo "pushed"; exit 0; }
+            echo "push retry $i"; sleep 4
+          done
+          echo "push failed after retries"; exit 1
