@@ -56,12 +56,13 @@ async function gql(cursor) {
     if (json.errors) {
       // complexity/rate errors -> back off; otherwise fail loudly
       const msg = JSON.stringify(json.errors);
-      if (/rate|complexity|limit/i.test(msg) && attempt < 4) { await sleep(5000 * (attempt + 1)); continue; }
+      if (/rate|complexity|limit/i.test(msg) && attempt < 3) { await sleep(5000 * (attempt + 1)); continue; }
+      if (/rate|complexity|limit/i.test(msg)) return null; // exhausted -> stop, keep partial
       throw new Error("GraphQL error: " + msg);
     }
     return json.data.posts;
   }
-  throw new Error("giving up after retries");
+  return null; // rate-limited past retries -> signal caller to stop & save
 }
 
 const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ").trim()}"`;
@@ -69,9 +70,12 @@ const cols = ["id", "name", "tagline", "description", "topics", "createdAt", "vo
 
 async function main() {
   const rows = [];
-  let cursor = null, page = 0;
+  let cursor = null, page = 0, stoppedEarly = false;
   while (rows.length < MAX) {
-    const posts = await gql(cursor);
+    let posts;
+    try { posts = await gql(cursor); }
+    catch (e) { console.log("fetch error: " + e.message + " — saving partial"); stoppedEarly = true; break; }
+    if (!posts) { console.log("rate limit reached — saving partial cohort"); stoppedEarly = true; break; }
     for (const e of posts.edges) {
       const n = e.node;
       rows.push({
@@ -85,8 +89,10 @@ async function main() {
     console.log(`page ${page}: +${posts.edges.length} (total ${rows.length})`);
     if (!posts.pageInfo.hasNextPage) break;
     cursor = posts.pageInfo.endCursor;
-    await sleep(1200); // stay under the complexity budget
+    await sleep(2000); // stay under the complexity budget
   }
+  if (rows.length === 0) { console.error("no rows fetched"); process.exit(1); }
+  console.log(`collected ${rows.length} rows${stoppedEarly ? " (stopped early on rate limit)" : ""}`);
   fs.mkdirSync("data", { recursive: true });
   const header = cols.join(",");
   const body = rows.slice(0, MAX).map((r) => cols.map((c) => csvCell(r[c])).join(",")).join("\n");
