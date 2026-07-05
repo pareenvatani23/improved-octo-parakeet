@@ -1,0 +1,39 @@
+name: Fetch app icon colors
+
+# Extracts icon colors for the committed Google Play cohort on a runner
+# (open internet), commits data/icon_colors.csv.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm init -y >/dev/null 2>&1 && npm i google-play-scraper@10 sharp >/dev/null 2>&1 && echo installed
+
+      - name: Extract icon colors
+        run: node tools/fetch_icons.mjs
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf node_modules package.json package-lock.json
+          git add data/icon_colors.csv
+          if git diff --staged --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "data: app icon colors"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && { echo "pushed"; exit 0; }
+            echo "retry $i"; sleep 4
+          done
+          echo "push failed"; exit 1
