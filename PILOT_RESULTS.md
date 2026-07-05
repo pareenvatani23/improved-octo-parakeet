@@ -46,6 +46,31 @@ otherwise have produced a falsely encouraging result.
 - LLM feature extraction and a bigger, multi-category cohort are cheap upgrades to
   try *if* a real outcome label is in hand.
 
+## Update: broadened pilot (2,258 apps, 5+ categories)
+Re-ran after adding Productivity, Fintech, Health & Fitness, Developer Tools to
+the AI cohort (2,258 apps; ~10% hit rate; same time-split). This adds real
+variance to the "trend" dimension, which was the main worry with AI-only.
+
+| Model | ROC-AUC | top-decile lift |
+|---|---|---|
+| full (taxonomy + length) | 0.620 | 1.61× |
+| taxonomy + has_ai (no length) | 0.583 | 1.61× |
+| **taxonomy ONLY** | **0.512 ≈ chance** | 1.47× |
+| word_count only | 0.590 | 1.47× |
+
+**Same verdict, now confirmed across categories.** The out-of-time signal
+decomposes entirely into two confounders:
+1. **description length** (`word_count`) — launch effort/detail, ROC 0.590 alone;
+2. **has_ai** — an AI-hype/timing artifact (AI apps drew more 2022–23 buzz).
+
+The **idea taxonomy itself** — the 6 dimensions we'd actually use to *generate*
+ideas — is at **ROC 0.512 ≈ chance**. Broadening did **not** rescue it, exactly as
+predicted: the ceiling is the *label* (buzz), not the features or the cohort size.
+
+**Final pilot conclusion:** Product Hunt buzz cannot teach the model what makes an
+idea good. The pipeline is proven and reusable; to get real signal it must be
+pointed at a real outcome label (downloads / revenue / survival), not votes.
+
 ## Reproduce
 ```
 # (fetch runs in GitHub Actions -> data/producthunt_cohort.csv)
