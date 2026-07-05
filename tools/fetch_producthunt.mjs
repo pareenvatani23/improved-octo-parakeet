@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-/* Fetch a Product Hunt launch cohort into data/producthunt_cohort.csv.
+/* Fetch/append a multi-category Product Hunt launch cohort into
+ * data/producthunt_cohort.csv (merged, deduped by id).
  *
- * Runs on a GitHub Actions runner (open internet); reads the token from the
- * PH_TOKEN env var (a repo secret). Pulls launches in NEWEST order within a
- * date window so the cohort includes flops (no survivorship/vote bias), then
- * writes a CSV for the outcome-learning pipeline.
+ * Runs on a GitHub Actions runner (open internet); PH_TOKEN from a repo secret.
+ * NEWEST order within a date window (cohort includes flops). Appends to any
+ * existing CSV so several runs (spaced past the 15-min rate limit) accumulate
+ * across categories. Saves partial + exits cleanly on rate limit.
  *
- *   PH_TOKEN=xxx node tools/fetch_producthunt.mjs <topicSlug|all> <after> <before> <max>
- *   e.g. node tools/fetch_producthunt.mjs artificial-intelligence 2022-01-01 2024-01-01 1500
+ *   PH_TOKEN=xxx node tools/fetch_producthunt.mjs <topicsCsv|all> <after> <before> <perTopic>
+ *   e.g. node tools/fetch_producthunt.mjs "productivity,fintech,health-fitness" 2022-01-01 2024-01-01 300
  *
- * Outcome label captured = votesCount (a BUZZ proxy, not revenue). Honest for a
- * pilot that tests the pipeline + whether any signal exists.
+ * Label captured = votesCount (buzz proxy), for the pilot.
  */
 import fs from "node:fs";
 
@@ -18,14 +18,14 @@ const API = "https://api.producthunt.com/v2/api/graphql";
 const TOKEN = process.env.PH_TOKEN;
 if (!TOKEN) { console.error("ERROR: PH_TOKEN env var not set (add it as a repo secret)."); process.exit(1); }
 
-const topic = (process.argv[2] || "artificial-intelligence").trim();
+const topics = (process.argv[2] || "artificial-intelligence").split(",").map((s) => s.trim()).filter(Boolean);
 const after = (process.argv[3] || "2022-01-01") + "T00:00:00Z";
 const before = (process.argv[4] || "2024-01-01") + "T00:00:00Z";
-const MAX = parseInt(process.argv[5] || "1500", 10);
+const PER_TOPIC = parseInt(process.argv[5] || "300", 10);
+const FILE = "data/producthunt_cohort.csv";
+const cols = ["id", "name", "tagline", "description", "topics", "createdAt", "votesCount", "commentsCount", "website", "url"];
 
-const useTopic = topic && topic.toLowerCase() !== "all";
-
-const QUERY = `
+const buildQuery = (useTopic) => `
 query Cohort($after: DateTime!, $before: DateTime!, $cursor: String${useTopic ? ", $topic: String!" : ""}) {
   posts(order: NEWEST, postedAfter: $after, postedBefore: $before, first: 20, after: $cursor${useTopic ? ", topic: $topic" : ""}) {
     edges { node {
@@ -38,66 +38,80 @@ query Cohort($after: DateTime!, $before: DateTime!, $cursor: String${useTopic ? 
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function gql(cursor) {
-  const variables = { after, before, cursor };
-  if (useTopic) variables.topic = topic;
-  for (let attempt = 0; attempt < 5; attempt++) {
+async function gql(query, variables) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch(API, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${TOKEN}`, "Accept": "application/json" },
-      body: JSON.stringify({ query: QUERY, variables }),
+      body: JSON.stringify({ query, variables }),
     });
-    if (res.status === 429 || res.status === 503) {
-      const wait = 5000 * (attempt + 1);
-      console.log(`rate-limited (${res.status}); waiting ${wait}ms…`);
-      await sleep(wait); continue;
-    }
+    if (res.status === 429 || res.status === 503) { await sleep(5000 * (attempt + 1)); continue; }
     const json = await res.json();
     if (json.errors) {
-      // complexity/rate errors -> back off; otherwise fail loudly
       const msg = JSON.stringify(json.errors);
       if (/rate|complexity|limit/i.test(msg) && attempt < 3) { await sleep(5000 * (attempt + 1)); continue; }
-      if (/rate|complexity|limit/i.test(msg)) return null; // exhausted -> stop, keep partial
+      if (/rate|complexity|limit/i.test(msg)) return null;
       throw new Error("GraphQL error: " + msg);
     }
     return json.data.posts;
   }
-  return null; // rate-limited past retries -> signal caller to stop & save
+  return null;
 }
 
 const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ").trim()}"`;
-const cols = ["id", "name", "tagline", "description", "topics", "createdAt", "votesCount", "commentsCount", "website", "url"];
+const csvLine = (n) => cols.map((c) => {
+  if (c === "topics") return csvCell((n.topics?.edges || []).map((t) => t.node.name).join("|"));
+  return csvCell(n[c]);
+}).join(",");
+
+function loadExisting() {
+  if (!fs.existsSync(FILE)) return { ids: new Set(), lines: [] };
+  const raw = fs.readFileSync(FILE, "utf8").split(/\r?\n/);
+  const ids = new Set(); const lines = [];
+  for (const ln of raw) {
+    if (!ln || ln.startsWith("#") || ln.startsWith("id,")) continue;
+    const m = ln.match(/^"((?:[^"]|"")*)"/); // first field = id
+    if (m) { ids.add(m[1]); lines.push(ln); }
+  }
+  return { ids, lines };
+}
 
 async function main() {
-  const rows = [];
-  let cursor = null, page = 0, stoppedEarly = false;
-  while (rows.length < MAX) {
-    let posts;
-    try { posts = await gql(cursor); }
-    catch (e) { console.log("fetch error: " + e.message + " — saving partial"); stoppedEarly = true; break; }
-    if (!posts) { console.log("rate limit reached — saving partial cohort"); stoppedEarly = true; break; }
-    for (const e of posts.edges) {
-      const n = e.node;
-      rows.push({
-        id: n.id, name: n.name, tagline: n.tagline, description: n.description,
-        topics: (n.topics?.edges || []).map((t) => t.node.name).join("|"),
-        createdAt: n.createdAt, votesCount: n.votesCount, commentsCount: n.commentsCount,
-        website: n.website, url: n.url,
-      });
+  const { ids, lines } = loadExisting();
+  console.log(`existing rows: ${lines.length}`);
+  const newLines = [];
+  let stopped = false;
+
+  for (const t of topics) {
+    if (stopped) break;
+    const useTopic = t.toLowerCase() !== "all";
+    const query = buildQuery(useTopic);
+    let cursor = null, got = 0, page = 0;
+    while (got < PER_TOPIC) {
+      const variables = { after, before, cursor };
+      if (useTopic) variables.topic = t;
+      let posts;
+      try { posts = await gql(query, variables); }
+      catch (e) { console.log(`[${t}] error ${e.message} — saving partial`); stopped = true; break; }
+      if (!posts) { console.log(`[${t}] rate limit — saving partial`); stopped = true; break; }
+      for (const e of posts.edges) {
+        const n = e.node;
+        if (ids.has(n.id)) continue;
+        ids.add(n.id); newLines.push(csvLine(n)); got++;
+      }
+      page++;
+      console.log(`[${t}] page ${page}: +${posts.edges.length} (topic new ${got}, total new ${newLines.length})`);
+      if (!posts.pageInfo.hasNextPage) break;
+      cursor = posts.pageInfo.endCursor;
+      await sleep(2000);
     }
-    page++;
-    console.log(`page ${page}: +${posts.edges.length} (total ${rows.length})`);
-    if (!posts.pageInfo.hasNextPage) break;
-    cursor = posts.pageInfo.endCursor;
-    await sleep(2000); // stay under the complexity budget
   }
-  if (rows.length === 0) { console.error("no rows fetched"); process.exit(1); }
-  console.log(`collected ${rows.length} rows${stoppedEarly ? " (stopped early on rate limit)" : ""}`);
+
+  const all = [...lines, ...newLines];
+  if (all.length === 0) { console.error("no rows"); process.exit(1); }
   fs.mkdirSync("data", { recursive: true });
-  const header = cols.join(",");
-  const body = rows.slice(0, MAX).map((r) => cols.map((c) => csvCell(r[c])).join(",")).join("\n");
-  const meta = `# producthunt cohort | topic=${topic} | ${after}..${before} | n=${Math.min(rows.length, MAX)} | label=votesCount(buzz proxy)\n`;
-  fs.writeFileSync("data/producthunt_cohort.csv", meta + header + "\n" + body + "\n");
-  console.log(`wrote data/producthunt_cohort.csv (${Math.min(rows.length, MAX)} rows)`);
+  const meta = `# producthunt cohort | topics=${topics.join("+")}+prev | ${after}..${before} | n=${all.length} (+${newLines.length} new) | label=votesCount(buzz proxy)\n`;
+  fs.writeFileSync(FILE, meta + cols.join(",") + "\n" + all.join("\n") + "\n");
+  console.log(`wrote ${FILE}: ${all.length} rows (+${newLines.length} new)${stopped ? " [stopped early on rate limit]" : ""}`);
 }
 main().catch((e) => { console.error(e.message); process.exit(1); });

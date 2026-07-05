@@ -6,18 +6,18 @@ name: Fetch Product Hunt cohort
 on:
   workflow_dispatch:
     inputs:
-      topic:
-        description: "Product Hunt topic slug (or 'all')"
-        default: "artificial-intelligence"
+      topics:
+        description: "Comma-separated PH topic slugs (or 'all')"
+        default: "productivity,fintech,health-fitness,developer-tools"
       after:
         description: "Launched after (YYYY-MM-DD)"
         default: "2022-01-01"
       before:
         description: "Launched before (YYYY-MM-DD)"
         default: "2024-01-01"
-      max:
-        description: "Max apps to fetch"
-        default: "1500"
+      per_topic:
+        description: "Max apps per topic"
+        default: "300"
 
 permissions:
   contents: write
@@ -37,10 +37,10 @@ jobs:
           PH_TOKEN: ${{ secrets.PH_TOKEN }}
         run: |
           node tools/fetch_producthunt.mjs \
-            "${{ github.event.inputs.topic }}" \
+            "${{ github.event.inputs.topics }}" \
             "${{ github.event.inputs.after }}" \
             "${{ github.event.inputs.before }}" \
-            "${{ github.event.inputs.max }}"
+            "${{ github.event.inputs.per_topic }}"
 
       - name: Commit cohort CSV
         run: |
@@ -50,6 +50,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "no changes to commit"
           else
-            git commit -m "data: Product Hunt cohort (topic=${{ github.event.inputs.topic }}, ${{ github.event.inputs.after }}..${{ github.event.inputs.before }})"
+            git commit -m "data: Product Hunt cohort (+topics=${{ github.event.inputs.topics }})"
             git push
           fi
