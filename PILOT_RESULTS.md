@@ -71,6 +71,38 @@ predicted: the ceiling is the *label* (buzz), not the features or the cohort siz
 idea good. The pipeline is proven and reusable; to get real signal it must be
 pointed at a real outcome label (downloads / revenue / survival), not votes.
 
+## Update 2: real install labels (Google Play, 1,200 apps) — data was unusable
+Fetched a Google Play cohort via search (real `minInstalls` label) to get a
+*real* outcome instead of buzz. The pipeline ran, but the **data itself is not
+valid for the question**, and the honest move is to say so:
+
+- **Not a launch cohort.** Search surfaces popular survivors, so the sample spans
+  launch years **2010–2026** with a **median of 1,000,000 installs** — essentially
+  no real flops are present (survivorship + popularity bias).
+- **The label leaks age.** Installs are cumulative, so old apps dominate the top
+  decile: **92% of the "install-hits" (100M+) launched before 2023.** The label is
+  effectively "how long has this existed," not "is the idea good."
+- **Degenerate eval.** After the time-split, the test base rate collapses to 2.8%,
+  and the taxonomy-only "3× lift" is ~1 app out of ~10 test hits — **noise, not
+  signal.**
+
+**Conclusion:** free Google Play data (search-sourced) cannot answer the question.
+A valid test needs a **launch cohort** — every app released in a narrow window,
+*including flops*, with installs measured at a fixed time-since-launch. Free web
+sources don't provide that; it requires a market-data provider that lists new
+releases comprehensively (Sensor Tower / data.ai / AppMagic). This is the crux
+flagged in Phase 0, now demonstrated empirically.
+
+## Overall verdict across both pilots
+- **Product Hunt (buzz label):** idea taxonomy at chance; signal was length + hype.
+- **Google Play (install label):** data unusable — survivorship + age bias.
+
+Neither *free* source can validly show that idea features predict success. The
+pipeline is proven and reusable; the blocker is a **representative launch cohort
+with a real outcome**, which is paid. Honest recommendation: keep the App-Idea
+tool as the transparent *rubric* it now is, and only revisit outcome-learning
+with proper market data.
+
 ## Reproduce
 ```
 # (fetch runs in GitHub Actions -> data/producthunt_cohort.csv)

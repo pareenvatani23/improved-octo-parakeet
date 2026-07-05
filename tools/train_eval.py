@@ -116,8 +116,9 @@ def main():
     else:
         print("NO RELIABLE SIGNAL: not better than chance out-of-time. Honest result — "
               "buzz on this data isn't predictable from these features (expected for a weak label).")
-    print("\nNote: label = Product Hunt votes (a BUZZ proxy, not revenue). This tests the "
-          "pipeline and whether ANY signal exists — not commercial success.")
+    print("\nNote: the label is a proxy and the free cohorts are biased (PH=buzz; "
+          "Google Play search=survivorship+age). See PILOT_RESULTS.md for the caveats "
+          "that make these numbers indicative at best.")
 
 
 if __name__ == "__main__":
