@@ -103,6 +103,31 @@ with a real outcome**, which is paid. Honest recommendation: keep the App-Idea
 tool as the transparent *rubric* it now is, and only revisit outcome-learning
 with proper market data.
 
+## Update 3: does ICON COLOR predict downloads? (No — it's a brand/age mirage)
+Extracted each app's icon average colour + hue bucket (1,200 apps) and joined to
+installs. `tools/fetch_icons.mjs` + `tools/analyze_color.py`.
+
+**Raw (confounded) result looked juicy:** red icons had a 20.8% install-hit rate
+vs ~9% for blue/green. But it does not survive scrutiny:
+
+- **It's a few famous old brands.** The top "warm-coloured" apps are Google Meet
+  (10B installs, yellow), Snapchat & Pinterest (2012), Google Keep, and a cluster
+  of ~2013 video editors (InShot, KineMaster, VivaVideo — red/orange). Their colour
+  is branding; their installs come from a decade of accumulation.
+- **Age confound.** Install-hits launched in **2015** on average vs **2019** for the
+  cohort; the warm-colour hits are the *oldest* (median 2013). So "red wins" really
+  means "old famous apps happen to be red."
+- **Fails the honest test.** Out-of-time, adding colour to `genre+year` *lowered*
+  ROC (0.716 → 0.636); colour-only ROC 0.548. Colour adds nothing beyond
+  category/age, and the test fold is degenerate anyway (2.8% base rate).
+
+**Verdict:** no, icon colour is not a usable download signal here — the apparent
+effect is brand + survivorship + age, not colour. (A real test would need a launch
+cohort incl. flops, colour measured at launch, controlled for category — i.e. the
+same paid-data requirement as everything else. Note: icon-colour A/B tests *do*
+move install *conversion* in industry, but that's a within-app experiment, not
+"colour predicts total downloads across apps.")
+
 ## Reproduce
 ```
 # (fetch runs in GitHub Actions -> data/producthunt_cohort.csv)
