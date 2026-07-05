@@ -1,0 +1,55 @@
+name: Fetch Product Hunt cohort
+
+# Runs the Product Hunt fetch on a GitHub-hosted runner (open internet), using
+# the PH_TOKEN repo secret, and commits data/producthunt_cohort.csv back.
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Product Hunt topic slug (or 'all')"
+        default: "artificial-intelligence"
+      after:
+        description: "Launched after (YYYY-MM-DD)"
+        default: "2022-01-01"
+      before:
+        description: "Launched before (YYYY-MM-DD)"
+        default: "2024-01-01"
+      max:
+        description: "Max apps to fetch"
+        default: "1500"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch cohort
+        env:
+          PH_TOKEN: ${{ secrets.PH_TOKEN }}
+        run: |
+          node tools/fetch_producthunt.mjs \
+            "${{ github.event.inputs.topic }}" \
+            "${{ github.event.inputs.after }}" \
+            "${{ github.event.inputs.before }}" \
+            "${{ github.event.inputs.max }}"
+
+      - name: Commit cohort CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/producthunt_cohort.csv
+          if git diff --staged --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "data: Product Hunt cohort (topic=${{ github.event.inputs.topic }}, ${{ github.event.inputs.after }}..${{ github.event.inputs.before }})"
+            git push
+          fi
