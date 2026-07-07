@@ -114,8 +114,8 @@ def main():
     elif best_lift >= 1.2:
         print("WEAK SIGNAL: modestly better than chance; treat as directional only.")
     else:
-        print("NO RELIABLE SIGNAL: not better than chance out-of-time. Honest result — "
-              "buzz on this data isn't predictable from these features (expected for a weak label).")
+        print("NO RELIABLE SIGNAL: not better than chance out-of-time. The idea/taxonomy "
+              "features do not predict the outcome on this data.")
     print("\nNote: the label is a proxy and the free cohorts are biased (PH=buzz; "
           "Google Play search=survivorship+age). See PILOT_RESULTS.md for the caveats "
           "that make these numbers indicative at best.")

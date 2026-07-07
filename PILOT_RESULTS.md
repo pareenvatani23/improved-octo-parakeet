@@ -128,6 +128,42 @@ same paid-data requirement as everything else. Note: icon-colour A/B tests *do*
 move install *conversion* in industry, but that's a within-app experiment, not
 "colour predicts total downloads across apps.")
 
+## Update 4: the clean test — PH launch list (incl. flops) + real installs
+The definitive free version of "get apps by category, label flop vs hit by their
+numbers." We took the Product Hunt launch list (which **includes flops by design**)
+and matched each app to Google Play for its **real install count**
+(`tools/enrich_ph_installs.mjs`). 253 of 2,258 PH apps were on Google Play with a
+confident name match.
+
+**This fixed the survivorship problem** — the install distribution finally spans
+the whole range: min **0**, p25 **100**, median **5,000**, p90 **1,000,000**
+(vs. the search-sourced pull whose *median* was 1,000,000 — i.e. no flops at all).
+
+**Result (out-of-time, real install label, flops present):**
+| Model | ROC-AUC | top-decile lift |
+|---|---|---|
+| full (taxonomy + length) | 0.589 | 0.78× |
+| **taxonomy ONLY** | **0.457 (below chance)** | 0.00× |
+| word_count only | — | 1.55× |
+
+**Verdict: even with the flops in the sample, the idea taxonomy does NOT predict
+install success.** Taxonomy-only is *below* chance; only description length has a
+weak edge (the effort proxy we've seen throughout). This is the strongest version
+of the finding because it's no longer explainable by survivorship — the failures
+were included and the idea features still carry no signal.
+
+Caveats: small sample (253; ~76 in the test fold), and only PH apps that shipped
+to Google Play are covered. But the direction is consistent with every prior run.
+
+## Overall conclusion (all pilots)
+Across buzz, search-sourced installs, icon colour, and now a flop-inclusive
+install cohort: **app success is not predictable from idea/creative features alone
+in any free data we can obtain.** The only recurring "signal" is description length
+(effort), which is not idea merit. Execution, marketing, timing and luck — the
+things these features can't see — dominate. To even attempt a real answer you need
+the private drivers (retention, spend, k-factor) or at minimum a large, clean
+launch cohort with velocity labels (paid market data, e.g. AppTweak/Sensor Tower).
+
 ## Reproduce
 ```
 # (fetch runs in GitHub Actions -> data/producthunt_cohort.csv)
