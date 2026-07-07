@@ -64,6 +64,7 @@ function writeOut(out, processed, done) {
 }
 
 async function main() {
+  process.on("unhandledRejection", () => {});   // ignore stray scraper rejections
   const gplay = (await import("google-play-scraper")).default;
   const rows = readPH();
   console.log(`PH apps: ${rows.length}`);
@@ -76,10 +77,10 @@ async function main() {
     while (next < work.length) {
       const r = work[next++];
       processed++;
-      const name = r.name;
-      if (name && norm(name).length >= 4) {
-        try {
-          const res = await gplay.search({ term: name, num: 4, country: COUNTRY, throttle: 10 });
+      try {
+        const name = r.name;
+        if (name && norm(name).length >= 4) {
+          const res = await gplay.search({ term: name, num: 4, country: COUNTRY });
           let hit = null, conf = null;
           for (const a of res) { const c = matchConf(name, a.title); if (c) { hit = a; conf = c; break; } }
           if (hit) {
@@ -93,10 +94,10 @@ async function main() {
             });
             matched++;
           }
-        } catch (e) { /* skip */ }
-      }
+        }
+      } catch (e) { /* skip this app */ }
       if (processed % 100 === 0) console.log(`processed ${processed}/${work.length} matched ${matched}`);
-      await sleep(60);
+      await sleep(80);
     }
   }
   await Promise.all(Array.from({ length: CONC }, () => worker()));
