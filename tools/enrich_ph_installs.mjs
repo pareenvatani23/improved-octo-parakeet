@@ -56,44 +56,53 @@ function matchConf(phName, playTitle) {
 const outCols = ["phId", "name", "description", "topics", "createdAt", "votesCount",
   "matchedAppId", "matchedTitle", "matchConf", "minInstalls", "genre", "released", "free", "offersIAP"];
 
+function writeOut(out, processed, done) {
+  fs.mkdirSync("data", { recursive: true });
+  const meta = `# ph->play enriched | matched=${out.length}/${processed}${done ? "" : " [checkpoint]"} | label=minInstalls | list=PH(includes flops)\n`;
+  const body = out.map((x) => outCols.map((c) => csvCell(x[c])).join(",")).join("\n");
+  fs.writeFileSync(OUT, meta + outCols.join(",") + "\n" + body + "\n");
+}
+
 async function main() {
   const gplay = (await import("google-play-scraper")).default;
   const rows = readPH();
   console.log(`PH apps: ${rows.length}`);
   const out = [];
-  let processed = 0, matched = 0;
+  const work = rows.slice(0, MAX);
+  let next = 0, processed = 0, matched = 0;
+  const CONC = 6;
 
-  for (const r of rows) {
-    if (processed >= MAX) break;
-    processed++;
-    const name = r.name;
-    if (!name || norm(name).length < 4) continue;
-    try {
-      const res = await gplay.search({ term: name, num: 4, country: COUNTRY, throttle: 5 });
-      let hit = null, conf = null;
-      for (const a of res) { const c = matchConf(name, a.title); if (c) { hit = a; conf = c; break; } }
-      if (hit) {
-        const d = await gplay.app({ appId: hit.appId, country: COUNTRY });
-        out.push({
-          phId: r.id, name, description: r.description, topics: r.topics,
-          createdAt: r.createdAt, votesCount: r.votesCount,
-          matchedAppId: d.appId, matchedTitle: d.title, matchConf: conf,
-          minInstalls: d.minInstalls ?? 0, genre: d.genre, released: d.released,
-          free: d.free ? 1 : 0, offersIAP: d.offersIAP ? 1 : 0,
-        });
-        matched++;
-        await sleep(150);
+  async function worker() {
+    while (next < work.length) {
+      const r = work[next++];
+      processed++;
+      const name = r.name;
+      if (name && norm(name).length >= 4) {
+        try {
+          const res = await gplay.search({ term: name, num: 4, country: COUNTRY, throttle: 10 });
+          let hit = null, conf = null;
+          for (const a of res) { const c = matchConf(name, a.title); if (c) { hit = a; conf = c; break; } }
+          if (hit) {
+            const d = await gplay.app({ appId: hit.appId, country: COUNTRY });
+            out.push({
+              phId: r.id, name, description: r.description, topics: r.topics,
+              createdAt: r.createdAt, votesCount: r.votesCount,
+              matchedAppId: d.appId, matchedTitle: d.title, matchConf: conf,
+              minInstalls: d.minInstalls ?? 0, genre: d.genre, released: d.released,
+              free: d.free ? 1 : 0, offersIAP: d.offersIAP ? 1 : 0,
+            });
+            matched++;
+          }
+        } catch (e) { /* skip */ }
       }
-    } catch (e) { /* skip */ }
-    if (processed % 100 === 0) console.log(`processed ${processed}/${rows.length} matched ${matched}`);
-    await sleep(250);
+      if (processed % 100 === 0) console.log(`processed ${processed}/${work.length} matched ${matched}`);
+      await sleep(60);
+    }
   }
+  await Promise.all(Array.from({ length: CONC }, () => worker()));
 
   if (out.length === 0) { console.error("no matches"); process.exit(1); }
-  fs.mkdirSync("data", { recursive: true });
-  const meta = `# ph->play enriched | matched=${out.length}/${processed} | label=minInstalls | list=PH(includes flops)\n`;
-  const body = out.map((x) => outCols.map((c) => csvCell(x[c])).join(",")).join("\n");
-  fs.writeFileSync(OUT, meta + outCols.join(",") + "\n" + body + "\n");
+  writeOut(out, processed, true);
   console.log(`wrote ${OUT}: ${out.length} matched apps (of ${processed} PH apps)`);
 }
 main().catch((e) => { console.error(e.message); process.exit(1); });
