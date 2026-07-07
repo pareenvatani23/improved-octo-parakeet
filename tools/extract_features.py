@@ -67,6 +67,7 @@ TAXO = {
 }
 AI_CUES = ["ai", "gpt", "llm", "machine learning", "neural", "genai", "artificial intelligence"]
 
+ENR = Path("data/ph_play_enriched.csv")   # PH launch list (incl. flops) + real Play installs
 GP = Path("data/googleplay_cohort.csv")
 PH = Path("data/producthunt_cohort.csv")
 OUT = Path("data/features.csv")
@@ -101,7 +102,15 @@ def parse_date_gp(s):
 
 
 def main():
-    if GP.exists():
+    if ENR.exists():
+        src, rows = "ph_play_enriched", read_rows(ENR)
+        text_of = lambda r: " ".join([r.get("name", ""), r.get("description", ""), r.get("topics", "")]).lower()
+        label_of = lambda r: int(float(r.get("minInstalls") or 0))
+        date_of = lambda r: (r.get("createdAt", "") or "")[:10]   # PH launch date (clean)
+        extra = lambda r: {"free": int(r.get("free") or 0), "offersIAP": int(r.get("offersIAP") or 0)}
+        name_of = lambda r: r.get("name", "")
+        lbl_name = "installs(PH-listed)"
+    elif GP.exists():
         src, rows = "googleplay", read_rows(GP)
         text_of = lambda r: " ".join([r.get("title", ""), r.get("description", ""), r.get("genre", "")]).lower()
         label_of = lambda r: int(float(r.get("minInstalls") or 0))

@@ -1,0 +1,38 @@
+name: Enrich PH cohort with Play installs
+
+on:
+  workflow_dispatch:
+    inputs:
+      max:
+        description: "Max PH apps to process"
+        default: "99999"
+
+permissions:
+  contents: write
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install scraper
+        run: npm init -y >/dev/null 2>&1 && npm i google-play-scraper@10 >/dev/null 2>&1 && echo installed
+      - name: Enrich
+        run: node tools/enrich_ph_installs.mjs "${{ github.event.inputs.max }}"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf node_modules package.json package-lock.json
+          git add data/ph_play_enriched.csv
+          if git diff --staged --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "data: PH cohort enriched with Google Play installs"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && { echo "pushed"; exit 0; }
+            echo "retry $i"; sleep 4
+          done
+          echo "push failed"; exit 1
